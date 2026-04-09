@@ -1,6 +1,9 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const { OAuth2Client } = require("google-auth-library");
 const User = require("../models/user.model");
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // POST /auth/register
 async function register(req, res) {
@@ -50,6 +53,11 @@ async function token(req, res) {
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) return res.status(401).json({ message: "Credenciales inválidas." });
 
+    // Usuario registrado con Google no tiene contraseña
+    if (!user.passwordHash) {
+      return res.status(401).json({ message: "Esta cuenta fue creada con Google. Usá el botón de Google para ingresar." });
+    }
+
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ message: "Credenciales inválidas." });
 
@@ -65,4 +73,52 @@ async function token(req, res) {
   }
 }
 
-module.exports = { register, token };
+// POST /auth/google
+async function googleAuth(req, res) {
+  try {
+    const { credential } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({ message: "Token de Google requerido." });
+    }
+
+    // Verificar el token con Google
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { sub: googleId, email, given_name: name, family_name: lastName } = payload;
+
+    // Buscar si el usuario ya existe por googleId o por email
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+    if (!user) {
+      // Registro nuevo con Google
+      user = await User.create({
+        name,
+        lastName: lastName || "",
+        email,
+        googleId,
+      });
+    } else if (!user.googleId) {
+      // Ya existe por email (registrado con contraseña), vincular su googleId
+      user.googleId = googleId;
+      await user.save();
+    }
+
+    const jwtToken = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "2h" }
+    );
+
+    return res.status(200).json({ token: jwtToken });
+  } catch (e) {
+    console.error("Error en Google Auth:", e.message);
+    return res.status(401).json({ message: "Token de Google inválido o expirado." });
+  }
+}
+
+module.exports = { register, token, googleAuth };

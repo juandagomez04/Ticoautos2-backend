@@ -5,22 +5,68 @@ const User = require("../models/user.model");
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+// GET /auth/cedula/:numero — consulta al microservicio del padrón
+async function validateCedula(req, res) {
+  try {
+    const { numero } = req.params;
+
+    if (!numero) {
+      return res.status(400).json({ message: "Número de cédula requerido." });
+    }
+
+    // Consulta al microservicio del padrón
+    const response = await fetch(`http://localhost:3002/cedula/${numero}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(404).json({ message: data.message || "Cédula no encontrada en el padrón." });
+    }
+
+    return res.status(200).json({
+      nombre: data.nombre,
+      apellido1: data.apellido1,
+      apellido2: data.apellido2,
+      sexo: data.sexo,
+      esMayorDeEdad: data.esMayorDeEdad,
+    });
+  } catch (e) {
+    console.error("Error validando cédula:", e.message);
+    return res.status(500).json({ message: "Error al consultar el padrón." });
+  }
+}
+
 // POST /auth/register
 async function register(req, res) {
   try {
-    const { name, lastName, email, password } = req.body;
+    const { name, lastName, email, password, cedula, birthDate } = req.body;
 
-    if (!name || !lastName || !email || !password) {
-      return res.status(400).json({ message: "Faltan datos: name, lastName, email, password." });
+    if (!name || !lastName || !email || !password || !cedula) {
+      return res.status(400).json({ message: "Faltan datos: name, lastName, email, password, cedula." });
     }
     if (password.length < 6) {
       return res.status(400).json({ message: "La contraseña debe tener mínimo 6 caracteres." });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
+    // Verificar mayoría de edad si viene la fecha de nacimiento
+    if (birthDate) {
+      const fecha = new Date(birthDate);
+      const hoy = new Date();
+      const edad = hoy.getFullYear() - fecha.getFullYear();
+      const cumplioEsteAnio =
+        hoy.getMonth() > fecha.getMonth() ||
+        (hoy.getMonth() === fecha.getMonth() && hoy.getDate() >= fecha.getDate());
+      const edadReal = cumplioEsteAnio ? edad : edad - 1;
+      if (edadReal < 18) {
+        return res.status(403).json({ message: "Debes ser mayor de 18 años para registrarte." });
+      }
+    }
 
+    const cleanEmail = email.toLowerCase().trim();
     const exists = await User.exists({ email: cleanEmail });
     if (exists) return res.status(409).json({ message: "Ese email ya está registrado." });
+
+    const cedulaExists = await User.exists({ cedula });
+    if (cedulaExists) return res.status(409).json({ message: "Esa cédula ya está registrada." });
 
     const passwordHash = await bcrypt.hash(password, 10);
 
@@ -29,6 +75,8 @@ async function register(req, res) {
       lastName: lastName.trim(),
       email: cleanEmail,
       passwordHash,
+      cedula,
+      birthDate: birthDate ? new Date(birthDate) : undefined,
     });
 
     return res.status(201).json({
@@ -121,4 +169,4 @@ async function googleAuth(req, res) {
   }
 }
 
-module.exports = { register, token, googleAuth };
+module.exports = { register, token, googleAuth, validateCedula };

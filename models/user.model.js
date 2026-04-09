@@ -6,7 +6,9 @@ const userSchema = new mongoose.Schema(
     lastName: { type: String, required: true, trim: true },
     email: { type: String, required: true, trim: true, lowercase: true, unique: true },
     passwordHash: { type: String, required: false }, // opcional para usuarios de Google
-    googleId: { type: String, required: false, unique: true, sparse: true }, // sparse permite múltiples null
+    googleId: { type: String, required: false, unique: true, sparse: true },
+    cedula: { type: String, required: false, unique: true, sparse: true },
+    birthDate: { type: Date, required: false },
   },
   { timestamps: true }
 );

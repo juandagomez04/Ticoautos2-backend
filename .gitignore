@@ -1,3 +1,24 @@
+# Dependencias
 node_modules/
+package-lock.json
+
+# Variables de entorno
 .env
+.env.local
+
+# Configuración de editores
+.vscode/
+.idea/
+.claude/
+
+# Logs
+logs/
+*.log
+
+# Sistema operativo
 .DS_Store
+Thumbs.db
+
+# Archivos temporales
+*.tmp
+*.temp

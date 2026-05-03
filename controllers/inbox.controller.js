@@ -1,5 +1,6 @@
 const Conversation = require("../models/conversation.model");
 const Vehicle = require("../models/vehicle.model");
+const { containsContactInfo } = require("../services/ai.service");
 
 // POST /api/inbox/:vehicleId/message  →  enviar mensaje (comprador o vendedor)
 async function sendMessage(req, res) {
@@ -33,6 +34,13 @@ async function sendMessage(req, res) {
 
         if (lastMsg && lastMsg.role === myRole) {
             return res.status(409).json({ message: "Debes esperar la respuesta del otro usuario antes de enviar otro mensaje." });
+        }
+
+        const hasContactInfo = await containsContactInfo(text.trim());
+        if (hasContactInfo) {
+            return res.status(400).json({
+                message: "Tu mensaje contiene información de contacto personal. Por seguridad, las negociaciones deben realizarse dentro de la plataforma.",
+            });
         }
 
         conversation.messages.push({ sender: req.user.id, role: myRole, text: text.trim() });
@@ -70,6 +78,13 @@ async function replyMessage(req, res) {
         const lastMsg = conversation.messages[conversation.messages.length - 1];
         if (lastMsg && lastMsg.role === "owner") {
             return res.status(409).json({ message: "Debes esperar la respuesta del comprador antes de enviar otro mensaje." });
+        }
+
+        const hasContactInfo = await containsContactInfo(text.trim());
+        if (hasContactInfo) {
+            return res.status(400).json({
+                message: "Tu mensaje contiene información de contacto personal. Por seguridad, las negociaciones deben realizarse dentro de la plataforma.",
+            });
         }
 
         conversation.messages.push({ sender: req.user.id, role: "owner", text: text.trim() });
